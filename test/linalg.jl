@@ -1,7 +1,7 @@
 debug = false
 
-import Base.LinAlg
-import Base.LinAlg: BlasComplex, BlasFloat, BlasReal
+@everywhere import Base.LinAlg
+@everywhere import Base.LinAlg: BlasComplex, BlasFloat, BlasReal
 
 n     = 10
 srand(1234321)
@@ -20,10 +20,12 @@ areal = randn(n,n)/2
 aimg  = randn(n,n)/2
 breal = randn(n,2)/2
 bimg  = randn(n,2)/2
-for eltya in (Float16, Float32, Float64, Complex32, Complex64, Complex128, BigFloat, Int)
+aint = rand(1:5, n, n)
+bint = rand(1:5, n, 2)
+@parallel (+) for eltya in (Float16, Float32, Float64, Complex32, Complex64, Complex128, BigFloat, Int)
     for eltyb in (Float16, Float32, Float64, Complex32, Complex64, Complex128, Int)
-        a = eltya == Int ? rand(1:5, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex(areal, aimg) : areal)
-        b = eltyb == Int ? rand(1:5, n, 2) : convert(Matrix{eltyb}, eltyb <: Complex ? complex(breal, bimg) : breal)
+        a = eltya == Int ? aint : convert(Matrix{eltya}, eltya <: Complex ? complex(areal, aimg) : areal)
+        b = eltyb == Int ? bint : convert(Matrix{eltyb}, eltyb <: Complex ? complex(breal, bimg) : breal)
         asym = a'+a                  # symmetric indefinite
         apd  = a'*a                 # symmetric positive-definite
 
@@ -64,7 +66,7 @@ debug && println("pivoted Choleksy decomposition")
         cpapd = cholfact(apd, pivot=true)
         @test rank(cpapd) == n
         @test all(diff(diag(real(cpapd.UL))).<=0.) # diagonal should be non-increasing
-        @test_approx_eq_eps b apd * (cpapd\b) 15000ε
+        @test_approx_eq_eps b apd * (cpapd\b) 150000ε
         if isreal(apd)
             @test_approx_eq apd * inv(cpapd) eye(n)
         end
@@ -250,14 +252,15 @@ debug && println("Matrix square root")
         @test_approx_eq asymsq*asymsq asym
     end
 end
+0
 end
 
 ## Least squares solutions
-a = [ones(20) 1:20 1:20]
-b = reshape(eye(8, 5), 20, 2)
-for elty in (Float32, Float64, Complex64, Complex128)
-    a = convert(Matrix{elty}, a)
-    b = convert(Matrix{elty}, b)
+a0 = [ones(20) 1:20 1:20]
+b0 = reshape(eye(8, 5), 20, 2)
+@parallel (+) for elty in (Float32, Float64, Complex64, Complex128)
+    a = convert(Matrix{elty}, a0)
+    b = convert(Matrix{elty}, b0)
 
     # Vector rhs
     x = a[:,1:2]\b[:,1]
@@ -280,6 +283,7 @@ for elty in (Float32, Float64, Complex64, Complex128)
 
     # symmetric, indefinite
     @test_approx_eq inv(convert(Matrix{elty}, [1. 2; 2 1])) convert(Matrix{elty}, [-1. 2; 2 -1]/3)
+    0
 end
 
 ## Test Julia fallbacks to BLAS routines
@@ -371,7 +375,7 @@ Aref = Ai[1:2:2*cutoff, 1:3]
 @test Ac_mul_B(Asub, Asub) == Ac_mul_B(Aref, Aref)
 
 # Matrix exponential
-for elty in (Float32, Float64, Complex64, Complex128)
+@parallel (+) for elty in (Float32, Float64, Complex64, Complex128)
         A1  = convert(Matrix{elty}, [4 2 0; 1 4 1; 1 1 4])
         eA1 = convert(Matrix{elty}, [147.866622446369 127.781085523181  127.781085523182;
         183.765138646367 183.765138646366  163.679601723179;
@@ -415,6 +419,7 @@ for elty in (Float32, Float64, Complex64, Complex128)
                         [4.000000000000000  -1.414213562373094  -1.414213562373095
                         -1.414213562373095   4.999999999999996  -0.000000000000000
                                          0  -0.000000000000002   3.000000000000000])
+    0
 end
 
 # Hermitian matrix exponential
@@ -433,40 +438,39 @@ n = 5
 
 srand(123)
 
-d = 1 + rand(n)
-dl = -rand(n-1)
-du = -rand(n-1)
-v = randn(n)
-B = randn(n,2)
+d0 = 1 + rand(n)
+dl0 = -rand(n-1)
+du0 = -rand(n-1)
+v0 = randn(n)
+B0 = randn(n,2)
 
 # Woodbury
-U = randn(n,2)
-V = randn(2,n)
-C = randn(2,2)
+U0 = randn(n,2)
+V0 = randn(2,n)
+C0 = randn(2,2)
 
-for elty in (Float32, Float64, Complex64, Complex128, Int)
-    if elty == Int
-        srand(61516384)
-        d = rand(1:100, n)
-        dl = -rand(0:10, n-1)
-        du = -rand(0:10, n-1)
-        v = rand(1:100, n)
-        B = rand(1:100, n, 2)
+# Int
+dint = rand(1:100, n)
+dlint = -rand(0:10, n-1)
+duint = -rand(0:10, n-1)
+vint = rand(1:100, n)
+Bint = rand(1:100, n, 2)
 
-        # Woodbury
-        U = rand(1:100, n, 2)
-        V = rand(1:100, 2, n)
-        C = rand(1:100, 2, 2)
-    else 
-        d = convert(Vector{elty}, d)
-        dl = convert(Vector{elty}, dl)
-        du = convert(Vector{elty}, du)
-        v = convert(Vector{elty}, v)
-        B = convert(Matrix{elty}, B)
-        U = convert(Matrix{elty}, U)
-        V = convert(Matrix{elty}, V)
-        C = convert(Matrix{elty}, C)
-    end
+# Woodbury
+Uint = rand(1:100, n, 2)
+Vint = rand(1:100, 2, n)
+Cint = rand(1:100, 2, 2)
+
+
+@parallel (+) for elty in (Float32, Float64, Complex64, Complex128, Int)
+    d = convert(Vector{elty}, elty  == Int ? dint :  d0)
+    dl = convert(Vector{elty}, elty  == Int ? dlint : dl0)
+    du = convert(Vector{elty}, elty  == Int ? duint : du0)
+    v = convert(Vector{elty}, elty  == Int ? vint :  v0)
+    B = convert(Matrix{elty}, elty  == Int ? Bint :  B0)
+    U = convert(Matrix{elty}, elty  == Int ? Uint :  U0)
+    V = convert(Matrix{elty}, elty  == Int ? Vint :  V0)
+    C = convert(Matrix{elty}, elty  == Int ? Cint :  C0)
     T = Tridiagonal(dl, d, du)
     @test size(T, 1) == n
     @test size(T) == (n, n)
@@ -557,45 +561,46 @@ for elty in (Float32, Float64, Complex64, Complex128, Int)
     # issue 1490
     @test_approx_eq_eps det(ones(elty, 3,3)) zero(elty) 3*eps(real(one(elty)))
     end
+    0
 end
 
 # Generic BLAS tests
 srand(100)
+U0 = randn(5,2)
+V0 = randn(5,2)
 # syr2k! and her2k!
-for elty in (Float32, Float64, Complex64, Complex128)
-    U = randn(5,2)
-    V = randn(5,2)
+@parallel (+) for elty in (Float32, Float64, Complex64, Complex128)
     if elty == Complex64 || elty == Complex128
-        U = complex(U, U)
-        V = complex(V, V)
+        U = complex(U0, U0)
+        V = complex(V0, V0)
     end
-    U = convert(Array{elty, 2}, U)
-    V = convert(Array{elty, 2}, V)
-    @test_approx_eq tril(LinAlg.BLAS.syr2k('L','N',U,V)) tril(U*V.' + V*U.')
-    @test_approx_eq triu(LinAlg.BLAS.syr2k('U','N',U,V)) triu(U*V.' + V*U.')
-    @test_approx_eq tril(LinAlg.BLAS.syr2k('L','T',U,V)) tril(U.'*V + V.'*U)
-    @test_approx_eq triu(LinAlg.BLAS.syr2k('U','T',U,V)) triu(U.'*V + V.'*U)        
+    U = convert(Array{elty, 2}, U0)
+    V = convert(Array{elty, 2}, V0)
+    @test_approx_eq tril(BLAS.syr2k('L','N',U,V)) tril(U*V.' + V*U.')
+    @test_approx_eq triu(BLAS.syr2k('U','N',U,V)) triu(U*V.' + V*U.')
+    @test_approx_eq tril(BLAS.syr2k('L','T',U,V)) tril(U.'*V + V.'*U)
+    @test_approx_eq triu(BLAS.syr2k('U','T',U,V)) triu(U.'*V + V.'*U)
+    0
 end
 
-for elty in (Complex64, Complex128)
-    U = randn(5,2)
-    V = randn(5,2)
+@parallel (+) for elty in (Complex64, Complex128)
     if elty == Complex64 || elty == Complex128
-        U = complex(U, U)
-        V = complex(V, V)
+        U = complex(U0, U0)
+        V = complex(V0, V0)
     end
-    U = convert(Array{elty, 2}, U)
-    V = convert(Array{elty, 2}, V)
-    @test_approx_eq tril(LinAlg.BLAS.her2k('L','N',U,V)) tril(U*V' + V*U')
-    @test_approx_eq triu(LinAlg.BLAS.her2k('U','N',U,V)) triu(U*V' + V*U')
-    @test_approx_eq tril(LinAlg.BLAS.her2k('L','C',U,V)) tril(U'*V + V'*U)
-    @test_approx_eq triu(LinAlg.BLAS.her2k('U','C',U,V)) triu(U'*V + V'*U)        
+    U = convert(Array{elty, 2}, U0)
+    V = convert(Array{elty, 2}, V0)
+    @test_approx_eq tril(BLAS.her2k('L','N',U,V)) tril(U*V' + V*U')
+    @test_approx_eq triu(BLAS.her2k('U','N',U,V)) triu(U*V' + V*U')
+    @test_approx_eq tril(BLAS.her2k('L','C',U,V)) tril(U'*V + V'*U)
+    @test_approx_eq triu(BLAS.her2k('U','C',U,V)) triu(U'*V + V'*U)
+    0
 end
 
 # LAPACK tests
 srand(123)
 Ainit = randn(5,5)
-for elty in (Float32, Float64, Complex64, Complex128)
+@parallel (+) for elty in (Float32, Float64, Complex64, Complex128)
     # syevr!
     if elty == Complex64 || elty == Complex128
         A = complex(Ainit, Ainit)
@@ -604,16 +609,17 @@ for elty in (Float32, Float64, Complex64, Complex128)
     end
     A = convert(Array{elty, 2}, A)
     Asym = A'A
-    vals, Z = LinAlg.LAPACK.syevr!('V', copy(Asym))
+    vals, Z = LAPACK.syevr!('V', copy(Asym))
     @test_approx_eq Z*scale(vals, Z') Asym
     @test all(vals .> 0.0)
-    @test_approx_eq LinAlg.LAPACK.syevr!('N','V','U',copy(Asym),0.0,1.0,4,5,-1.0)[1] vals[vals .< 1.0]
-    @test_approx_eq LinAlg.LAPACK.syevr!('N','I','U',copy(Asym),0.0,1.0,4,5,-1.0)[1] vals[4:5]
-    @test_approx_eq vals LinAlg.LAPACK.syev!('N','U',copy(Asym))
+    @test_approx_eq LAPACK.syevr!('N','V','U',copy(Asym),0.0,1.0,4,5,-1.0)[1] vals[vals .< 1.0]
+    @test_approx_eq LAPACK.syevr!('N','I','U',copy(Asym),0.0,1.0,4,5,-1.0)[1] vals[4:5]
+    @test_approx_eq vals LAPACK.syev!('N','U',copy(Asym))
+    0
 end
 
 #Test equivalence of eigenvectors/singular vectors taking into account possible phase (sign) differences
-function test_approx_eq_vecs{S<:Real,T<:Real}(a::StridedVecOrMat{S}, b::StridedVecOrMat{T}, error=nothing)
+@everywhere function test_approx_eq_vecs{S<:Real,T<:Real}(a::StridedVecOrMat{S}, b::StridedVecOrMat{T}, error=nothing)
     n = size(a, 1)
     @test n==size(b,1) && size(a,2)==size(b,2)
     error==nothing && (error=n^3*(eps(S)+eps(T)))
@@ -630,80 +636,89 @@ end
 
 #Triangular matrices
 n=12
-for relty in (Float16, Float32, Float64, BigFloat), elty in (relty, Complex{relty})
-    A = convert(Matrix{elty}, randn(n, n))
-    b = convert(Matrix{elty}, randn(n, 2))
-    if elty <: Complex
-        A += im*convert(Matrix{elty}, randn(n, n))
-        b += im*convert(Matrix{elty}, randn(n, 2))
-    end
-
-    for M in (triu(A), tril(A))
-        TM = Triangular(M)
-        condM = elty <:BlasFloat ? cond(TM, Inf) : convert(relty, cond(complex128(M), Inf))
-        #Linear solver
-        x = M \ b
-        tx = TM \ b
-        @test norm(x-tx,Inf) <= 4*condM*max(eps()*norm(tx,Inf), eps(relty)*norm(x,Inf))
-        if elty <: BlasFloat #test naivesub! against LAPACK
-            tx = [LinAlg.naivesub!(TM, b[:,1]) LinAlg.naivesub!(TM, b[:,2])]
-            @test norm(x-tx,Inf) <= 4*condM*max(eps()*norm(tx,Inf), eps(relty)*norm(x,Inf))
+@parallel (+) for relty in (Float16, Float32, Float64, BigFloat)
+    for elty in (relty, Complex{relty})
+        A = convert(Matrix{elty}, randn(n, n))
+        b = convert(Matrix{elty}, randn(n, 2))
+        if elty <: Complex
+            A += im*convert(Matrix{elty}, randn(n, n))
+            b += im*convert(Matrix{elty}, randn(n, 2))
         end
-
-        #Eigensystems
-        vals1, vecs1 = eig(complex128(M))
-        vals2, vecs2 = eig(TM)
-        res1=norm(complex128(vecs1*diagm(vals1)*inv(vecs1) - M))
-        res2=norm(complex128(vecs2*diagm(vals2)*inv(vecs2) - full(TM)))
-        @test_approx_eq_eps res1 res2 res1+res2
-
-        if elty <:BlasFloat
-            #Condition number tests - can be VERY approximate
-            for p in [1.0, Inf]
-                @test_approx_eq_eps cond(TM, p) cond(M, p) (cond(TM,p)+cond(M,p))*0.2
+    
+        for M in (triu(A), tril(A))
+            TM = Triangular(M)
+            condM = elty <: BlasFloat ? cond(TM, Inf) : convert(relty, cond(complex128(M), Inf))
+            #Linear solver
+            x = M \ b
+            tx = TM \ b
+            @test norm(x-tx,Inf) <= 4*condM*max(eps()*norm(tx,Inf), eps(relty)*norm(x,Inf))
+            if elty <: BlasFloat #test naivesub! against LAPACK
+                tx = [LinAlg.naivesub!(TM, b[:,1]) LinAlg.naivesub!(TM, b[:,2])]
+                @test norm(x-tx,Inf) <= 4*condM*max(eps()*norm(tx,Inf), eps(relty)*norm(x,Inf))
+            end
+    
+            #Eigensystems
+            vals1, vecs1 = eig(complex128(M))
+            vals2, vecs2 = eig(TM)
+            res1=norm(complex128(vecs1*diagm(vals1)*inv(vecs1) - M))
+            res2=norm(complex128(vecs2*diagm(vals2)*inv(vecs2) - full(TM)))
+            @test_approx_eq_eps res1 res2 res1+res2
+    
+            if elty <: BlasFloat
+                #Condition number tests - can be VERY approximate
+                for p in [1.0, Inf]
+                    @test_approx_eq_eps cond(TM, p) cond(M, p) (cond(TM,p)+cond(M,p))*0.2
+                end
             end
         end
     end
+    0
 end
 
 #Tridiagonal matrices
-for relty in (Float16, Float32, Float64), elty in (relty, Complex{relty})
-    a = convert(Vector{elty}, randn(n-1))
-    b = convert(Vector{elty}, randn(n))
-    c = convert(Vector{elty}, randn(n-1))
-    if elty <: Complex
-        a += im*convert(Vector{elty}, randn(n-1))
-        b += im*convert(Vector{elty}, randn(n))
-        c += im*convert(Vector{elty}, randn(n-1))
+@parallel (+) for relty in (Float16, Float32, Float64)
+    for elty in (relty, Complex{relty})
+        a = convert(Vector{elty}, randn(n-1))
+        b = convert(Vector{elty}, randn(n))
+        c = convert(Vector{elty}, randn(n-1))
+        if elty <: Complex
+            a += im*convert(Vector{elty}, randn(n-1))
+            b += im*convert(Vector{elty}, randn(n))
+            c += im*convert(Vector{elty}, randn(n-1))
+        end
+    
+        A=Tridiagonal(a, b, c)
+        fA=(elty<:Complex?complex128:float64)(full(A))
+        for func in (det, inv)
+            @test_approx_eq_eps func(A) func(fA) n^2*sqrt(eps(relty))
+        end
     end
-
-    A=Tridiagonal(a, b, c)
-    fA=(elty<:Complex?complex128:float64)(full(A))
-    for func in (det, inv)
-        @test_approx_eq_eps func(A) func(fA) n^2*sqrt(eps(relty))
-    end
+    0
 end
 
 #SymTridiagonal (symmetric tridiagonal) matrices
-for relty in (Float16, Float32, Float64), elty in (relty, )#XXX Complex{relty}) doesn't work
-    a = convert(Vector{elty}, randn(n))
-    b = convert(Vector{elty}, randn(n-1))
-    if elty <: Complex
-        relty==Float16 && continue
-        a += im*convert(Vector{elty}, randn(n))
-        b += im*convert(Vector{elty}, randn(n-1))
+@parallel (+) for relty in (Float16, Float32, Float64)
+    for elty in (relty, )#XXX Complex{relty}) doesn't work
+        a = convert(Vector{elty}, randn(n))
+        b = convert(Vector{elty}, randn(n-1))
+        if elty <: Complex
+            relty==Float16 && continue
+            a += im*convert(Vector{elty}, randn(n))
+            b += im*convert(Vector{elty}, randn(n-1))
+        end
+    
+        A=SymTridiagonal(a, b)
+        fA=(elty<:Complex?complex128:float64)(full(A))
+        for func in (det, inv)
+            @test_approx_eq_eps func(A) func(fA) n^2*sqrt(eps(relty))
+        end
     end
-
-    A=SymTridiagonal(a, b)
-    fA=(elty<:Complex?complex128:float64)(full(A))
-    for func in (det, inv)
-        @test_approx_eq_eps func(A) func(fA) n^2*sqrt(eps(relty))
-    end
+    0
 end
 
 Ainit = randn(n)
 Binit = randn(n-1)
-for elty in (Float32, Float64)
+@parallel (+) for elty in (Float32, Float64)
     A = convert(Array{elty, 1}, Ainit)
     B = convert(Array{elty, 1}, Binit)
     zero, infinity = convert(elty, 0), convert(elty, Inf)
@@ -725,94 +740,101 @@ for elty in (Float32, Float64)
     w, iblock, isplit = LinAlg.LAPACK.stebz!('V','B',-infinity,infinity,0,0,zero,A,B) 
     evecs = LinAlg.LAPACK.stein!(A, B, w, iblock, isplit)
     test_approx_eq_vecs(v, evecs)
+    0
 end
 
 #Bidiagonal matrices
-for relty in (Float16, Float32, Float64, BigFloat), elty in (relty, Complex{relty})
-    dv = convert(Vector{elty}, randn(n))
-    ev = convert(Vector{elty}, randn(n-1))
-    b = convert(Matrix{elty}, randn(n, 2))
-    if (elty <: Complex)
-        dv += im*convert(Vector{elty}, randn(n))
-        ev += im*convert(Vector{elty}, randn(n-1))
-        b += im*convert(Matrix{elty}, randn(n, 2))
-    end
-    for isupper in (true, false) #Test upper and lower bidiagonal matrices
-        T = Bidiagonal(dv, ev, isupper)
-        
-        @test size(T, 1) == size(T, 2) == n
-        @test size(T) == (n, n)
-        @test full(T) == diagm(dv) + diagm(ev, isupper?1:-1)
-        @test Bidiagonal(full(T), isupper) == T
-        z = zeros(elty, n)
-
-        # idempotent tests
-        for func in (conj, transpose, ctranspose)
-            @test func(func(T)) == T
+@parallel (+) for relty in (Float16, Float32, Float64, BigFloat)
+    for elty in (relty, Complex{relty})
+        dv = convert(Vector{elty}, randn(n))
+        ev = convert(Vector{elty}, randn(n-1))
+        b = convert(Matrix{elty}, randn(n, 2))
+        if (elty <: Complex)
+            dv += im*convert(Vector{elty}, randn(n))
+            ev += im*convert(Vector{elty}, randn(n-1))
+            b += im*convert(Matrix{elty}, randn(n, 2))
         end
-
-        #Linear solver
-        Tfull = full(T)
-        condT = cond(complex128(Tfull))
-        x = T \ b
-        tx = Tfull \ b
-        @test norm(x-tx,Inf) <= 4*condT*max(eps()*norm(tx,Inf), eps(relty)*norm(x,Inf))
-     
-        #Test eigenvalues/vectors
-        d1, v1 = eig(T)
-        d2, v2 = eig((elty<:Complex?complex128:float64)(Tfull))
-        @test_approx_eq isupper?d1:reverse(d1) d2
-        if elty <: Real
-            test_approx_eq_vecs(v1, isupper?v2:v2[:,n:-1:1])
-        end
-
-        if (elty <: BlasReal)
-            #Test singular values/vectors
-            @test_approx_eq svdvals(Tfull) svdvals(T)
-            u1, d1, v1 = svd(Tfull)
-            u2, d2, v2 = svd(T)
-            @test_approx_eq d1 d2
-            if elty <: Real
-                test_approx_eq_vecs(u1, u2) 
-                test_approx_eq_vecs(v1, v2)
+        for isupper in (true, false) #Test upper and lower bidiagonal matrices
+            T = Bidiagonal(dv, ev, isupper)
+            
+            @test size(T, 1) == size(T, 2) == n
+            @test size(T) == (n, n)
+            @test full(T) == diagm(dv) + diagm(ev, isupper?1:-1)
+            @test Bidiagonal(full(T), isupper) == T
+            z = zeros(elty, n)
+    
+            # idempotent tests
+            for func in (conj, transpose, ctranspose)
+                @test func(func(T)) == T
             end
-            @test_approx_eq_eps 0 normfro(u2*diagm(d2)*v2'-Tfull) n*max(n^2*eps(relty), normfro(u1*diagm(d1)*v1'-Tfull))
+    
+            #Linear solver
+            Tfull = full(T)
+            condT = cond(complex128(Tfull))
+            x = T \ b
+            tx = Tfull \ b
+            @test norm(x-tx,Inf) <= 4*condT*max(eps()*norm(tx,Inf), eps(relty)*norm(x,Inf))
+         
+            #Test eigenvalues/vectors
+            d1, v1 = eig(T)
+            d2, v2 = eig((elty<:Complex?complex128:float64)(Tfull))
+            @test_approx_eq isupper?d1:reverse(d1) d2
+            if elty <: Real
+                test_approx_eq_vecs(v1, isupper?v2:v2[:,n:-1:1])
+            end
+    
+            if (elty <: BlasReal)
+                #Test singular values/vectors
+                @test_approx_eq svdvals(Tfull) svdvals(T)
+                u1, d1, v1 = svd(Tfull)
+                u2, d2, v2 = svd(T)
+                @test_approx_eq d1 d2
+                if elty <: Real
+                    test_approx_eq_vecs(u1, u2) 
+                    test_approx_eq_vecs(v1, v2)
+                end
+                @test_approx_eq_eps 0 normfro(u2*diagm(d2)*v2'-Tfull) n*max(n^2*eps(relty), normfro(u1*diagm(d1)*v1'-Tfull))
+            end
         end
     end
+    0
 end
 
 #Diagonal matrices
 n=12
-for relty in (Float16, Float32, Float64, BigFloat), elty in (relty, Complex{relty})
-    d=convert(Vector{elty}, randn(n))
-    v=convert(Vector{elty}, randn(n))
-    U=convert(Matrix{elty}, randn(n,n))
-    if elty <: Complex
-        d+=im*convert(Vector{elty}, randn(n))
-        v+=im*convert(Vector{elty}, randn(n))
-        U+=im*convert(Matrix{elty}, randn(n,n))
-    end
-    D = Diagonal(d)
-    DM = diagm(d)
-    @test_approx_eq_eps D*v DM*v n*eps(relty)*(elty<:Complex ? 2:1)
-    @test_approx_eq_eps D*U DM*U n^2*eps(relty)*(elty<:Complex ? 2:1)
-    if relty != BigFloat 
-        @test_approx_eq_eps D\v DM\v 2n^2*eps(relty)*(elty<:Complex ? 2:1)
-        @test_approx_eq_eps D\U DM\U 2n^3*eps(relty)*(elty<:Complex ? 2:1)
-    end
-    for func in (det, trace)
-        @test_approx_eq_eps func(D) func(DM) n^2*eps(relty)
-    end
-    if relty <: BlasFloat
-        for func in (expm,)
+@parallel (+) for relty in (Float16, Float32, Float64, BigFloat)
+    for elty in (relty, Complex{relty})
+        d=convert(Vector{elty}, randn(n))
+        v=convert(Vector{elty}, randn(n))
+        U=convert(Matrix{elty}, randn(n,n))
+        if elty <: Complex
+            d+=im*convert(Vector{elty}, randn(n))
+            v+=im*convert(Vector{elty}, randn(n))
+            U+=im*convert(Matrix{elty}, randn(n,n))
+        end
+        D = Diagonal(d)
+        DM = diagm(d)
+        @test_approx_eq_eps D*v DM*v n*eps(relty)*(elty<:Complex ? 2:1)
+        @test_approx_eq_eps D*U DM*U n^2*eps(relty)*(elty<:Complex ? 2:1)
+        if relty != BigFloat 
+            @test_approx_eq_eps D\v DM\v 2n^2*eps(relty)*(elty<:Complex ? 2:1)
+            @test_approx_eq_eps D\U DM\U 2n^3*eps(relty)*(elty<:Complex ? 2:1)
+        end
+        for func in (det, trace)
             @test_approx_eq_eps func(D) func(DM) n^2*eps(relty)
         end
-    end        
-    if elty <: BlasComplex
-        for func in (logdet, sqrtm)
-            @test_approx_eq_eps func(D) func(DM) n^2*eps(relty)
+        if relty <: BlasFloat
+            for func in (expm,)
+                @test_approx_eq_eps func(D) func(DM) n^2*eps(relty)
+            end
+        end        
+        if elty <: BlasComplex
+            for func in (logdet, sqrtm)
+                @test_approx_eq_eps func(D) func(DM) n^2*eps(relty)
+            end
         end
     end
+    0
 end
 
 #Test interconversion between special matrix types
@@ -849,16 +871,17 @@ for newtype in [Diagonal, Bidiagonal, SymTridiagonal, Triangular, Matrix]
 end
 
 # Test gglse
-for elty in (Float32, Float64, Complex64, Complex128)
+@parallel (+) for elty in (Float32, Float64, Complex64, Complex128)
     A = convert(Array{elty, 2}, [1 1 1 1; 1 3 1 1; 1 -1 3 1; 1 1 1 3; 1 1 1 -1])
     c = convert(Array{elty, 1}, [2, 1, 6, 3, 1])
     B = convert(Array{elty, 2}, [1 1 1 -1; 1 -1 1 1; 1 1 -1 1])
     d = convert(Array{elty, 1}, [1, 3, -1])
     @test_approx_eq LinAlg.LAPACK.gglse!(A, c, B, d)[1] convert(Array{elty}, [0.5, -0.5, 1.5, 0.5])
+    0
 end
 
 # Test givens rotations
-for elty in (Float32, Float64, Complex64, Complex128)
+@parallel (+) for elty in (Float32, Float64, Complex64, Complex128)
     if elty <: Real
         A = convert(Matrix{elty}, randn(10,10))
     else
@@ -876,10 +899,11 @@ for elty in (Float32, Float64, Complex64, Complex128)
     end
     @test_approx_eq abs(A) abs(hessfact(Ac)[:H])
     @test_approx_eq norm(R*eye(elty, 10)) one(elty)
+    0
 end
 
 # Test gradient
-for elty in (Int32, Int64, Float32, Float64, Complex64, Complex128)
+@parallel (+) for elty in (Int32, Int64, Float32, Float64, Complex64, Complex128)
     if elty <: Real
         x = convert(Vector{elty}, [1:3])
         g = ones(elty, 3)
@@ -888,10 +912,11 @@ for elty in (Int32, Int64, Float32, Float64, Complex64, Complex128)
         g = convert(Vector{elty}, complex(ones(3), ones(3)))
     end
     @test_approx_eq gradient(x) g
+    0
 end
 
 # Test our own linear algebra functionaly against LAPACK
-for elty in (Float32, Float64, Complex{Float32}, Complex{Float64})
+@parallel (+) for elty in (Float32, Float64, Complex{Float32}, Complex{Float64})
     for nn in (5,10,15)
         if elty <: Real
             A = convert(Matrix{elty}, randn(10,nn))
@@ -912,6 +937,7 @@ for elty in (Float32, Float64, Complex{Float32}, Complex{Float64})
         @test_approx_eq FJulia.factors FLAPACK[1]
         @test_approx_eq FJulia.τ FLAPACK[2]
     end
+    0
 end
 
 # Test rational matrices
@@ -951,7 +977,7 @@ end
 nnorm = 1000
 mmat = 100
 nmat = 80
-for elty in (Float16, Float32, Float64, BigFloat, Complex{Float16}, Complex{Float32}, Complex{Float64}, Complex{BigFloat}, Int32, Int64, BigInt)
+@parallel (+) for elty in (Float16, Float32, Float64, BigFloat, Complex{Float16}, Complex{Float32}, Complex{Float64}, Complex{BigFloat}, Int32, Int64, BigInt)
     debug && println(elty)
 
     ## Vector
@@ -1067,6 +1093,7 @@ for elty in (Float16, Float32, Float64, BigFloat, Complex{Float16}, Complex{Floa
         elty <: Union(BigFloat,Complex{BigFloat},BigInt) || @test norm(As + Bs) <= norm(As) + norm(Bs) # two is default
         @test norm(As + Bs,Inf) <= norm(As,Inf) + norm(Bs,Inf)
     end
+    0
 end
 
 ## Issue related tests

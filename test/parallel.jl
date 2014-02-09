@@ -82,7 +82,7 @@ d[5,1:2:4,8] = 19
 AA = rand(4,2)
 A = convert(SharedArray, AA)
 B = convert(SharedArray, AA')
-@test B*A == AA'*AA
+@test B*A == (AA')*AA
 
 end # @unix_only(SharedArray tests)
 

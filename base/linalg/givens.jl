@@ -11,6 +11,9 @@ type Rotation{T}
 end
 typealias AbstractRotation Union(Givens, Rotation)
 
+realmin2(::Type{Float64}) = 1.0010415475915505e-146
+realmin2(::Type{Float32}) = 4.440892f-16
+
 function givensAlgorithm{T<:FloatingPoint}(f::T, g::T)
     zeropar = zero(T)
     onepar = one(T)
@@ -18,7 +21,7 @@ function givensAlgorithm{T<:FloatingPoint}(f::T, g::T)
 
     safmin = realmin(T)
     epspar = eps(T)
-    safmn2 = twopar^itrunc(log(safmin/epspar)/log(twopar)/twopar)
+    safmn2 = realmin2(T)
     safmx2 = onepar/safmn2
 
     if g == 0
@@ -84,7 +87,7 @@ function givensAlgorithm{T<:FloatingPoint}(f::Complex{T}, g::Complex{T})
     abs1(ff) = max(abs(real(ff)), abs(imag(ff)))
     safmin = realmin(T)
     epspar = eps(T)
-    safmn2 = twopar^itrunc(log(safmin/epspar)/log(twopar)/twopar)
+    safmn2 = realmin2(T)
     safmx2 = onepar/safmn2
     scalepar = max(abs1(f), abs1(g))
     fs = f
